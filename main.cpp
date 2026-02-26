@@ -72,9 +72,8 @@ WifiCred wifiList[MAX_WIFI];
 PCF8574 pcf(0x20);
 
 // Ultrasonic Calibration
-const float TANK_HEIGHT = 30.0;   // tangki 30cm
 const float FULL_LEVEL  = 3.0;    // Penuh jika <= 3 cm
-const float EMPTY_THRESHOLD = 25.0; // Habis jika >= 25 cm
+const float EMPTY_THRESHOLD = 44.0; // Habis jika >= 44 cm
 const float OFFSET_AIR   = -0.8;
 const float OFFSET_PEST = -1.6;
 
