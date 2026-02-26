@@ -132,11 +132,6 @@ String tanggalDitanam = "";
 volatile unsigned long pulseCount;
 float flowRate = 0.0;
 
-// =================== RELAY STATE MACHINE ===================
-// Desain: hanya SATU relay boleh ACTIVE sekaligus.
-// Jika relay lain sedang aktif, request masuk ke PENDING.
-// Saat relay selesai, processRelayQueue() otomatis jalankan yang PENDING.
-
 enum RelayState : uint8_t {
   RS_IDLE    = 0,  // Mati
   RS_ACTIVE  = 1,  // Sedang menyala & memompa
@@ -529,6 +524,11 @@ void calculateFlow() {
         r.lastPulseMs       = currentMillis;
         r.watchdogTriggered = false;
       }
+
+      // Serial Monitor: log flow setiap detik saat relay aktif
+      const char* name = (idx == RELAY_WATER) ? "Air" : "Pestisida";
+      Serial.printf("[FLOW %s] pulse=%lu | rate=%.2fL/min | +%.1fml | total=%.1fml / %.0fml\n",
+        name, count, flowRate, volumeAdded, r.volumeMl, r.targetVolumeMl);
     }
 
     // Akumulasi volume harian (dari relay yang aktif)
@@ -927,7 +927,12 @@ void activateRelay(int idx, RelaySource src, float targetMl) {
 
   const char* name   = (idx == RELAY_WATER) ? "Air" : "Pestisida";
   const char* srcStr = (src == SRC_MANUAL)  ? "Manual" : "Auto";
-  Serial.printf("✓ Relay %s ACTIVE [%s] target=%.0fml\n", name, srcStr, targetMl);
+  Serial.printf("\n=============================\n");
+  Serial.printf("   RELAY %s ON [%s]\n", name, srcStr);
+  Serial.printf("   Target : %.0f ml\n", targetMl);
+  Serial.printf("   Waktu  : %lu ms\n", millis());
+  Serial.printf("   Flow   : MENUNGGU PULSE...\n");
+  Serial.printf("=============================\n");
   sendNotification(String(name) + " dimulai [" + srcStr + "]" +
     (targetMl > 0 ? " target " + String((int)targetMl) + "ml" : ""));
 }
@@ -1031,8 +1036,7 @@ void updateRelayStateMachine() {
   }
 }
 
-// Tangani perintah Manual dari RTDB dengan deteksi edge (OFF->ON / ON->OFF)
-// Dipanggil dari readRTDBControl() saat mode Manual
+
 void applyManualCommands(const String& waterCmd, const String& pestCmd) {
   if (waterCmd != prevWaterCmd) {
     prevWaterCmd = waterCmd;
@@ -1059,13 +1063,6 @@ void applyManualCommands(const String& waterCmd, const String& pestCmd) {
       if (relays[RELAY_PEST].state == RS_PENDING) cancelPending(RELAY_PEST);
     }
   }
-}
-
-// Fungsi lama applyRelay() diganti — stub ini ditinggal agar tidak ada build error
-// jika ada pemanggilan tersisa; semua logika sudah pindah ke state machine di atas.
-void applyRelay() {
-  // Tidak diperlukan lagi — relay dikontrol oleh requestRelay() / stopRelay()
-  // Fungsi ini sengaja dikosongkan agar loop() tidak perlu diubah.
 }
 
 // =================== 13. OLED DISPLAY (3 TAMPILAN BERGANTIAN) ===================
@@ -1414,7 +1411,7 @@ void setup() {
         Serial.println("✓ Calibration system ready!");
       }
       
-      sendNotification("✅ Sistem online - Umur: " + String(umurTanamanDays) + " hari");
+      sendNotification("Sistem online - Umur: " + String(umurTanamanDays) + " hari");
       
     } else {
       Serial.println("⚠ Firebase initialization timeout!");
@@ -1482,7 +1479,6 @@ void loop() {
       checkScheduledPesticide();
     }
 
-    applyRelay();
     drawOLED();
   }
   
@@ -1495,8 +1491,8 @@ void loop() {
       readRTDBControl();
     }
     
-    // Write Status (1 menit)
-    if (millis() - lastRTDBWrite >= 60000) {
+    // Write Status (5 detik)
+    if (millis() - lastRTDBWrite >= 5000) {
       lastRTDBWrite = millis();
       writeRTDBStatus();
     }
